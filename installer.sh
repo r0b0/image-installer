@@ -11,6 +11,7 @@ LUKS_PASSWORD=luke
 HOSTNAME=debian12
 ENABLE_SWAP=partition
 SWAP_SIZE=2
+SECURE_BOOT=true
 SSH_PUBLIC_KEY=
 AFTER_INSTALLED_CMD=
 fi
@@ -432,6 +433,9 @@ firmware-zd1211
 hdmi2usb-fx2-firmware
 midisport-firmware
 sigrok-firmware-fx2lafw
+mokutil
+sbsigntool
+openssl
 EOF
 cat <<EOF > ${target}/tmp/run2.sh
 #!/bin/bash
@@ -465,6 +469,20 @@ fi
 if [ -z "${NON_INTERACTIVE}" ]; then
     notify running tasksel
     chroot ${target}/ tasksel
+fi
+
+if [ "${SECURE_BOOT}" = true ] ; then
+notify setting up secure boot
+cat <<EOF > ${target}/tmp/run3.sh
+mkdir -p /var/lib/shim-signed/mok
+cd /var/lib/shim-signed/mok/
+openssl req -nodes -new -x509 -newkey rsa:2048 -keyout MOK.priv -outform DER -out MOK.der -days 36500 -subj "/CN=${HOSTNAME}/"
+openssl x509 -inform der -in MOK.der -out MOK.pem
+mokutil --generate-hash=${ROOT_PASSWORD} > /tmp/mokutil.hash
+mokutil --import MOK.der --hash-file /tmp/mokutil.hash
+rm /tmp/mokutil.hash
+EOF
+chroot ${target}/ bash /tmp/run3.sh
 fi
 
 notify reverting backports apt-pin
